@@ -5,11 +5,20 @@
 This project provides a **deterministic, RTL-SDR–based Wingbits feeder** designed for systems running **multiple SDR receivers**.
 It allows explicit device selection using **RTL-SDR serial numbers**, avoiding device index conflicts when multiple dongles are present.
 
+---
+
+## Details
+
 This repository is a fork and specialization of [sicXnull/wingbits-ultrafeeder](https://github.com/sicXnull/wingbits-ultrafeeder), adapted to:
 - Focus exclusively on Wingbits
 - Support reliable multi-SDR setups
 - Simplify configuration and documentation
 - Remove abandoned or unnecessary components
+
+This Docker Compose setup runs two containers:
+- Ultrafeeder → ADS-B receiver, TAR1090 web map, Graphs1090 statistics
+- Wingbits → Feeder client (Geosigner and RTL-SDR integration)
+- It uses the sicXnull approach: deterministic USB device mapping via .env
 
 ---
 
@@ -18,7 +27,7 @@ This repository is a fork and specialization of [sicXnull/wingbits-ultrafeeder](
 This setup is supported on:
 
 - Linux (native)
-- Linux on ARM (Raspberry Pi, ARM64, ARMv7)
+- Linux on ARM (Raspberry Pi, ARM64)
 - Debian / Ubuntu–based distributions
 
 Not supported:
@@ -29,7 +38,7 @@ Docker and Docker Compose are required.
 
 ---
 
-## RTL-SDR Installation
+## RTL-SDR serial
 
 ### Install the RTL-SDR utilities using your distribution’s package manager.
 
@@ -40,17 +49,17 @@ apt update
 apt install rtl-sdr
 ```
 
-## udev Rules (Recommended)
+### udev Rules (Recommended)
 
 To allow non-root access to RTL-SDR devices, create udev rules:
 
-### Create the rules file:
+#### Create the rules file:
 
 ```bash
-nano /etc/udev/rules.d/20-rtlsdr.rules
+nano /etc/udev/rules.d/rtl-sdr.rules
 ```
 
-### Add the following rules:
+#### Add the following rules:
 
 ```text
 # RTL-SDR USB device permissions for ADS-B and AIS dongles
@@ -76,7 +85,7 @@ Notes:
 - This covers the majority of ADS-B and AIS dongles on the market. Anything else is rare or exotic.
 - Permissions 0666 allow any user or container to access the SDR without `sudo`.
 
-### Reload rules:
+#### Reload rules:
 
 ```bash
 udevadm control --reload-rules
@@ -85,18 +94,14 @@ udevadm trigger
 
 A reboot is recommended after applying udev rules.
 
----
-
-## Identify Your RTL-SDR Serial
-
-### List connected RTL-SDR devices:
+### Identify Your RTL-SDR Serial listing the connected RTL-SDR devices:
 
 ```bash
 rtl_test -t
 rtl_eeprom
 ```
 
-Use the serial number (not the device index) in the `.env` file.
+Use the serial number (not the device index) in the `.env` file for the `ADSB_SDR_SERIAL` variable.
 
 ---
 
@@ -111,7 +116,7 @@ mkdir wingbits-rtl-feeder && cd wingbits-rtl-feeder
 
 ```bash
 curl -L -o .env.example https://raw.githubusercontent.com/c-man-the-man/wingbits-rtl-feeder/main/.env.example
-curl -L -o docker-compose.yml https://raw.githubusercontent.com/Cc-man-the-man/wingbits-rtl-feeder/main/docker-compose.yml
+curl -L -o docker-compose.yml https://raw.githubusercontent.com/c-man-the-man/wingbits-rtl-feeder/main/docker-compose.yml
 ```
 
 ### Set and configure the .env file
@@ -121,14 +126,7 @@ cp .env.example .env
 nano .env
 ```
 
-**Edit `.env` and set:**
-
-- `WINGBITS_DEVICE_ID`
-- `FEEDER_LAT`, `FEEDER_LONG`
-- `FEEDER_TZ`
-Optional
-- `FEEDER_ALT_M`
-- `ADSB_SDR_SERIAL`
+Edit `.env` and set the **REQUIRED** variables, the `ADSB_SDR_SERIAL` is **OPTIONAL**, but it's the scope of this build, useful when multiple RTL-SDR devices are running on a system.
 
 ### Run the container
 
@@ -141,6 +139,14 @@ docker compose up -d
 ```bash
 docker compose logs -f
 ```
+
+---
+
+## Tips & Notes
+
+- Initial TAR1090 database update may take a few minutes on first startup.
+- Graphs1090 statistics are auto-generated and refreshed continuously.
+- Graphs1090 is served as a subpath of TAR1090 at `/graphs1090`, no additional port mapping is required.
 
 ---
 
