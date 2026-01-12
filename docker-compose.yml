@@ -1,67 +1,79 @@
 #version: "3.8"
 
 services:
-  wingbits-feeder:
+  wingbits:
     image: c-man-the-man/wingbits-rtl-feeder:latest
     container_name: wingbits
     hostname: wingbits
     restart: unless-stopped
 
-    # USB passthrough for RTL-SDR devices
+    # -------------------------------
+    # USB passthrough for RTL-SDR / Geosigner
+    # -------------------------------
+    # Map specific devices from host to container using the .env file
     devices:
-      - "/dev/bus/usb:/dev/bus/usb"
+      - "${SERIAL_DEVICE}:${SERIAL_DEVICE}"  # Geosigner or RTL-SDR device
+    privileged: true  # required for USB access
 
-    # Privileged mode required for low-level USB access
-    privileged: true
-
-    # Ports to expose
+    # -------------------------------
+    # Ports exposed for services
+    # -------------------------------
     ports:
-      - "8080:8080"   # TAR1090 / local map
-      - "80:80"       # graphs1090
+      - "8080:8080"   # TAR1090 web map
+      - "8090:8090"   # Graphs1090
       - "30006:30006" # Wingbits feeder JSON input
       - "30005:30005" # Optional: Beast input for MLAT / external feeders
 
-    # Mount points for persistent data
+    # -------------------------------
+    # Persistent storage
+    # -------------------------------
     volumes:
-      - globe_history:/var/globe_history    # Tar1090 / readsb aircraft state
-      - graphs1090:/var/lib/collectd       # Graphs1090 statistics
-      - /proc/diskstats:/proc/diskstats:ro # Optional: disk stats monitoring
+      - globe_history:/var/globe_history    # TAR1090 / readsb state
+      - graphs1090:/var/lib/collectd       # Graphs1090 stats
+      - /proc/diskstats:/proc/diskstats:ro # Optional disk stats
 
+    # -------------------------------
     # tmpfs for runtime performance
+    # -------------------------------
     tmpfs:
       - /run:exec,size=256M
       - /tmp:size=128M
       - /var/log:size=32M
 
-    # Networks
+    # -------------------------------
+    # Network configuration
+    # -------------------------------
     networks:
       - wingbits
 
+    # -------------------------------
     # Environment variables mapped from .env
+    # -------------------------------
     environment:
       # General Wingbits configuration
       - WINGBITS_DEVICE_ID=${WINGBITS_DEVICE_ID}       # REQUIRED: unique device ID / name
       - FEEDER_LAT=${FEEDER_LAT}                       # REQUIRED: feeder latitude
       - FEEDER_LONG=${FEEDER_LONG}                     # REQUIRED: feeder longitude
-      - FEEDER_ALT_M=${FEEDER_ALT_M}                   # REQUIRED: feeder altitude in meters
+      - FEEDER_ALT_M=${FEEDER_ALT_M}                   # REQUIRED: feeder altitude
       - FEEDER_TZ=${FEEDER_TZ}                         # REQUIRED: timezone
+      - FEEDER_NAME=${FEEDER_NAME}                     # Friendly name for TAR1090 map
 
-      # RTL-SDR configuration
+      # RTL-SDR / receiver parameters
       - READSB_DEVICE_TYPE=rtlsdr
-      - READSB_RTLSDR_DEVICE=${ADSB_SDR_SERIAL}       # REQUIRED: RTL-SDR serial number
+      - READSB_RTLSDR_DEVICE=${ADSB_SDR_SERIAL}       # Optional: RTL-SDR serial for deterministic selection
       - READSB_RTLSDR_PPM=${ADSB_SDR_PPM}             # Optional: PPM correction
-      - READSB_GAIN=${READSB_GAIN}                     # Optional: Gain (-10 = autogain)
+      - READSB_GAIN=${READSB_GAIN}                     # Receiver gain (-10 = autogain)
 
-      # Decoder / readsb parameters
-      - READSB_RX_LOCATION_ACCURACY=2                  # Accuracy level for json location
-      - READSB_STATS_RANGE=true                        # Enable aircraft stats over time
+      # Decoder / readsb
+      - READSB_RX_LOCATION_ACCURACY=2                  # JSON location accuracy
+      - READSB_STATS_RANGE=true                        # Track aircraft stats over time
 
-      # TAR1090 web map settings
+      # TAR1090 web map
       - UPDATE_TAR1090=true
-      - TAR1090_DEFAULTCENTERLAT=${FEEDER_LAT}
-      - TAR1090_DEFAULTCENTERLON=${FEEDER_LONG}
+      - TAR1090_DEFAULTCENTERLAT=${FEEDER_LAT}  
+      - TAR1090_DEFAULTCENTERLON=${FEEDER_LONG} 
       - TAR1090_MESSAGERATEINTITLE=true
-      - TAR1090_PAGETITLE=${FEEDER_NAME}              # Friendly feeder name
+      - TAR1090_PAGETITLE=${FEEDER_NAME}
       - TAR1090_PLANECOUNTINTITLE=true
       - TAR1090_ENABLE_AC_DB=true
       - TAR1090_FLIGHTAWARELINKS=true
@@ -71,10 +83,10 @@ services:
       - TAR1090_RANGERINGSDISTANCES=50,100,150,200
       - TAR1090_RANGERINGSCOLORS='#1A237E','#0D47A1','#42A5F5','#64B5F6'
 
-      # Graphs1090 parameters
+      # Graphs1090 configuration
       - GRAPHS1090_DARKMODE=true
 
-      # Optional Airspy configuration (leave blank if not used)
+      # Optional Airspy support
       - ENABLE_AIRSPY=${ENABLE_AIRSPY}
       - URL_AIRSPY=${URL_AIRSPY}
 
