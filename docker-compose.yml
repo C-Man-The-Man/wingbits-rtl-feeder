@@ -1,38 +1,67 @@
+#version: "3.8"
+
 services:
-  ultrafeeder:
-    image: ghcr.io/sdr-enthusiasts/docker-adsb-ultrafeeder
-    container_name: ultrafeeder
-    hostname: ultrafeeder
+  wingbits-feeder:
+    image: c-man-the-man/wingbits-rtl-feeder:latest
+    container_name: wingbits
+    hostname: wingbits
     restart: unless-stopped
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
-    device_cgroup_rules:
-      - "c 189:* rwm"
+
+    # USB passthrough for RTL-SDR devices
+    devices:
+      - "/dev/bus/usb:/dev/bus/usb"
+
+    # Privileged mode required for low-level USB access
+    privileged: true
+
+    # Ports to expose
     ports:
-      - 8077:80  #Web interface
+      - "8080:8080"   # TAR1090 / local map
+      - "80:80"       # graphs1090
+      - "30006:30006" # Wingbits feeder JSON input
+      - "30005:30005" # Optional: Beast input for MLAT / external feeders
+
+    # Mount points for persistent data
+    volumes:
+      - globe_history:/var/globe_history    # Tar1090 / readsb aircraft state
+      - graphs1090:/var/lib/collectd       # Graphs1090 statistics
+      - /proc/diskstats:/proc/diskstats:ro # Optional: disk stats monitoring
+
+    # tmpfs for runtime performance
+    tmpfs:
+      - /run:exec,size=256M
+      - /tmp:size=128M
+      - /var/log:size=32M
+
+    # Networks
+    networks:
+      - wingbits
+
+    # Environment variables mapped from .env
     environment:
-      # General parameters
-      - LOGLEVEL=error
-      - TZ=${FEEDER_TZ}
-      
-      # SDR parameters
+      # General Wingbits configuration
+      - WINGBITS_DEVICE_ID=${WINGBITS_DEVICE_ID}       # REQUIRED: unique device ID / name
+      - FEEDER_LAT=${FEEDER_LAT}                       # REQUIRED: feeder latitude
+      - FEEDER_LONG=${FEEDER_LONG}                     # REQUIRED: feeder longitude
+      - FEEDER_ALT_M=${FEEDER_ALT_M}                   # REQUIRED: feeder altitude in meters
+      - FEEDER_TZ=${FEEDER_TZ}                         # REQUIRED: timezone
+
+      # RTL-SDR configuration
       - READSB_DEVICE_TYPE=rtlsdr
-      - READSB_RTLSDR_DEVICE=${ADSB_SDR_SERIAL}
-      - READSB_RTLSDR_PPM=${ADSB_SDR_PPM}
-      - READSB_GAIN=${READSB_GAIN}
-      # Decoder parameters
-      - READSB_LAT=${FEEDER_LAT}
-      - READSB_LON=${FEEDER_LONG}
-      - READSB_ALT=${FEEDER_ALT_M}m
-      - READSB_RX_LOCATION_ACCURACY=2
-      - READSB_STATS_RANGE=true
-      
-      # TAR1090 parameters
+      - READSB_RTLSDR_DEVICE=${ADSB_SDR_SERIAL}       # REQUIRED: RTL-SDR serial number
+      - READSB_RTLSDR_PPM=${ADSB_SDR_PPM}             # Optional: PPM correction
+      - READSB_GAIN=${READSB_GAIN}                     # Optional: Gain (-10 = autogain)
+
+      # Decoder / readsb parameters
+      - READSB_RX_LOCATION_ACCURACY=2                  # Accuracy level for json location
+      - READSB_STATS_RANGE=true                        # Enable aircraft stats over time
+
+      # TAR1090 web map settings
       - UPDATE_TAR1090=true
       - TAR1090_DEFAULTCENTERLAT=${FEEDER_LAT}
       - TAR1090_DEFAULTCENTERLON=${FEEDER_LONG}
       - TAR1090_MESSAGERATEINTITLE=true
-      - TAR1090_PAGETITLE=${FEEDER_NAME}
+      - TAR1090_PAGETITLE=${FEEDER_NAME}              # Friendly feeder name
       - TAR1090_PLANECOUNTINTITLE=true
       - TAR1090_ENABLE_AC_DB=true
       - TAR1090_FLIGHTAWARELINKS=true
@@ -41,41 +70,13 @@ services:
       - TAR1090_RANGE_OUTLINE_WIDTH=2.0
       - TAR1090_RANGERINGSDISTANCES=50,100,150,200
       - TAR1090_RANGERINGSCOLORS='#1A237E','#0D47A1','#42A5F5','#64B5F6'
-      
-      # GRAPHS1090 parameters
+
+      # Graphs1090 parameters
       - GRAPHS1090_DARKMODE=true
 
-      # AIRSPY parameters
+      # Optional Airspy configuration (leave blank if not used)
       - ENABLE_AIRSPY=${ENABLE_AIRSPY}
       - URL_AIRSPY=${URL_AIRSPY}
-      
-    volumes:
-      - globe_history:/var/globe_history
-      - graphs1090:/var/lib/collectd
-      - /proc/diskstats:/proc/diskstats:ro
-      - /dev/bus/usb:/dev/bus/usb
-    tmpfs:
-      - /run:exec,size=256M
-      - /tmp:size=128M
-      - /var/log:size=32M
-    networks:
-      - wingbits
-
-  wingbits:
-    depends_on:
-      - ultrafeeder
-    image: sicnull/wingbits-uf
-    restart: always
-    labels:
-    - "com.centurylinklabs.watchtower.enable=true"
-    environment:
-      - WINGBITS_DEVICE_ID=${WINGBITS_DEVICE_ID}
-      - ULTRAFEEDER_HOST=ultrafeeder
-    devices:
-      - "${SERIAL_DEVICE}:${SERIAL_DEVICE}"
-    privileged: true
-    networks:
-      - wingbits
 
 volumes:
   globe_history:
@@ -85,3 +86,4 @@ networks:
   wingbits:
     name: wingbits
     external: true
+
